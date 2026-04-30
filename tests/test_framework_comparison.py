@@ -1,25 +1,70 @@
 import asyncio
 import pytest
+import sys
 from typing import Any, Dict, List
 
-from agent_compare.langchain_impl import (
-    LangChainConcurrentScenario,
-    LangChainMultiInstanceScenario,
-    LangChainMultiAgentScenario,
+from tests.conftest import (
+    skip_if_no_langchain,
+    skip_if_no_agentscope,
+    skip_if_no_both_frameworks,
+    _check_langchain,
+    _check_agentscope,
 )
-from agent_compare.agentscope_impl import (
-    AgentScopeConcurrentScenario,
-    AgentScopeMultiInstanceScenario,
-    AgentScopeMultiAgentScenario,
-)
+
+
+LangChainConcurrentScenario = None
+LangChainMultiInstanceScenario = None
+LangChainMultiAgentScenario = None
+AgentScopeConcurrentScenario = None
+AgentScopeMultiInstanceScenario = None
+AgentScopeMultiAgentScenario = None
+
+
+def _lazy_import_langchain():
+    """Lazy import LangChain implementations."""
+    global LangChainConcurrentScenario
+    global LangChainMultiInstanceScenario
+    global LangChainMultiAgentScenario
+    
+    if LangChainConcurrentScenario is None:
+        from agent_compare.langchain_impl import (
+            LangChainConcurrentScenario as _LangChainConcurrentScenario,
+            LangChainMultiInstanceScenario as _LangChainMultiInstanceScenario,
+            LangChainMultiAgentScenario as _LangChainMultiAgentScenario,
+        )
+        LangChainConcurrentScenario = _LangChainConcurrentScenario
+        LangChainMultiInstanceScenario = _LangChainMultiInstanceScenario
+        LangChainMultiAgentScenario = _LangChainMultiAgentScenario
+
+
+def _lazy_import_agentscope():
+    """Lazy import AgentScope implementations."""
+    global AgentScopeConcurrentScenario
+    global AgentScopeMultiInstanceScenario
+    global AgentScopeMultiAgentScenario
+    
+    if AgentScopeConcurrentScenario is None:
+        from agent_compare.agentscope_impl import (
+            AgentScopeConcurrentScenario as _AgentScopeConcurrentScenario,
+            AgentScopeMultiInstanceScenario as _AgentScopeMultiInstanceScenario,
+            AgentScopeMultiAgentScenario as _AgentScopeMultiAgentScenario,
+        )
+        AgentScopeConcurrentScenario = _AgentScopeConcurrentScenario
+        AgentScopeMultiInstanceScenario = _AgentScopeMultiInstanceScenario
+        AgentScopeMultiAgentScenario = _AgentScopeMultiAgentScenario
 
 
 class TestOutputStructureConsistency:
-    """测试输出结构一致性"""
+    """测试输出结构一致性（需要两个框架都可用）"""
 
     @pytest.mark.asyncio
+    @pytest.mark.both_frameworks
+    @skip_if_no_both_frameworks()
     async def test_concurrent_scenario_structure_match(self):
         """验证并发调度场景在两个框架中的输出结构一致"""
+        _lazy_import_langchain()
+        _lazy_import_agentscope()
+        
         lc_scenario = LangChainConcurrentScenario()
         as_scenario = AgentScopeConcurrentScenario()
 
@@ -67,8 +112,13 @@ class TestOutputStructureConsistency:
         assert set(as_dict["results"][0].keys()) == result_keys
 
     @pytest.mark.asyncio
+    @pytest.mark.both_frameworks
+    @skip_if_no_both_frameworks()
     async def test_multi_instance_scenario_structure_match(self):
         """验证多实例管理场景在两个框架中的输出结构一致"""
+        _lazy_import_langchain()
+        _lazy_import_agentscope()
+        
         lc_scenario = LangChainMultiInstanceScenario()
         as_scenario = AgentScopeMultiInstanceScenario()
 
@@ -107,8 +157,13 @@ class TestOutputStructureConsistency:
         assert set(as_dict["instances"][0].keys()) == instance_keys
 
     @pytest.mark.asyncio
+    @pytest.mark.both_frameworks
+    @skip_if_no_both_frameworks()
     async def test_multi_agent_scenario_structure_match(self):
         """验证多智能体协作场景在两个框架中的输出结构一致"""
+        _lazy_import_langchain()
+        _lazy_import_agentscope()
+        
         lc_scenario = LangChainMultiAgentScenario()
         as_scenario = AgentScopeMultiAgentScenario()
 
@@ -152,8 +207,11 @@ class TestConcurrentRateLimiting:
     """测试并发限流参数生效"""
 
     @pytest.mark.asyncio
+    @pytest.mark.langchain
+    @skip_if_no_langchain()
     async def test_max_concurrency_limit_langchain(self):
         """验证 LangChain 并发限流参数生效"""
+        _lazy_import_langchain()
         scenario = LangChainConcurrentScenario(base_delay_ms=50, jitter_ms=0)
 
         result = await scenario.run(num_tasks=10, max_concurrency=3)
@@ -164,8 +222,11 @@ class TestConcurrentRateLimiting:
         assert result.tasks_completed == 10
 
     @pytest.mark.asyncio
+    @pytest.mark.agentscope
+    @skip_if_no_agentscope()
     async def test_max_concurrency_limit_agentscope(self):
         """验证 AgentScope 并发限流参数生效"""
+        _lazy_import_agentscope()
         scenario = AgentScopeConcurrentScenario(base_delay_ms=50, jitter_ms=0)
 
         result = await scenario.run(num_tasks=10, max_concurrency=3)
@@ -176,8 +237,13 @@ class TestConcurrentRateLimiting:
         assert result.tasks_completed == 10
 
     @pytest.mark.asyncio
+    @pytest.mark.both_frameworks
+    @skip_if_no_both_frameworks()
     async def test_unlimited_concurrency(self):
         """验证无限并发时的行为"""
+        _lazy_import_langchain()
+        _lazy_import_agentscope()
+        
         lc_scenario = LangChainConcurrentScenario(base_delay_ms=10, jitter_ms=0)
         as_scenario = AgentScopeConcurrentScenario(base_delay_ms=10, jitter_ms=0)
 
@@ -194,8 +260,11 @@ class TestMultiInstanceIsolation:
     """测试多实例状态隔离"""
 
     @pytest.mark.asyncio
+    @pytest.mark.langchain
+    @skip_if_no_langchain()
     async def test_langchain_instance_isolation(self):
         """验证 LangChain 多实例状态隔离"""
+        _lazy_import_langchain()
         scenario = LangChainMultiInstanceScenario()
 
         result = await scenario.run(num_instances=5, prompts_per_instance=3)
@@ -210,8 +279,11 @@ class TestMultiInstanceIsolation:
         assert len(result.isolation_evidence) == 5
 
     @pytest.mark.asyncio
+    @pytest.mark.agentscope
+    @skip_if_no_agentscope()
     async def test_agentscope_instance_isolation(self):
         """验证 AgentScope 多实例状态隔离"""
+        _lazy_import_agentscope()
         scenario = AgentScopeMultiInstanceScenario()
 
         result = await scenario.run(num_instances=5, prompts_per_instance=3)
@@ -226,8 +298,13 @@ class TestMultiInstanceIsolation:
         assert len(result.isolation_evidence) == 5
 
     @pytest.mark.asyncio
+    @pytest.mark.both_frameworks
+    @skip_if_no_both_frameworks()
     async def test_instance_memory_independence(self):
         """验证实例内存相互独立"""
+        _lazy_import_langchain()
+        _lazy_import_agentscope()
+        
         lc_scenario = LangChainMultiInstanceScenario()
         as_scenario = AgentScopeMultiInstanceScenario()
 
@@ -242,8 +319,11 @@ class TestExceptionPathCapture:
     """测试异常路径能被汇总捕获"""
 
     @pytest.mark.asyncio
+    @pytest.mark.langchain
+    @skip_if_no_langchain()
     async def test_langchain_exception_capture(self):
         """验证 LangChain 异常路径被捕获"""
+        _lazy_import_langchain()
         scenario = LangChainMultiAgentScenario()
 
         result = await scenario.run(fail_subtask="st-002")
@@ -259,8 +339,11 @@ class TestExceptionPathCapture:
         assert "PARTIAL_SUCCESS" in result.review_conclusion
 
     @pytest.mark.asyncio
+    @pytest.mark.agentscope
+    @skip_if_no_agentscope()
     async def test_agentscope_exception_capture(self):
         """验证 AgentScope 异常路径被捕获"""
+        _lazy_import_agentscope()
         scenario = AgentScopeMultiAgentScenario()
 
         result = await scenario.run(fail_subtask="st-002")
@@ -276,8 +359,13 @@ class TestExceptionPathCapture:
         assert "PARTIAL_SUCCESS" in result.review_conclusion
 
     @pytest.mark.asyncio
+    @pytest.mark.both_frameworks
+    @skip_if_no_both_frameworks()
     async def test_successful_path_no_errors(self):
         """验证成功路径无错误"""
+        _lazy_import_langchain()
+        _lazy_import_agentscope()
+        
         lc_scenario = LangChainMultiAgentScenario()
         as_scenario = AgentScopeMultiAgentScenario()
 
@@ -296,9 +384,10 @@ class TestExceptionPathCapture:
 
 
 class TestFakeLLMDeterminism:
-    """测试假LLM输出确定性"""
+    """测试假LLM输出确定性（无需框架）"""
 
     @pytest.mark.asyncio
+    @pytest.mark.fake_llm
     async def test_hash_based_determinism(self):
         """验证基于哈希的规则输出稳定"""
         from agent_compare.fake_llm import (
@@ -320,6 +409,7 @@ class TestFakeLLMDeterminism:
         assert response1.metadata["message_hash"] == response2.metadata["message_hash"]
 
     @pytest.mark.asyncio
+    @pytest.mark.fake_llm
     async def test_keyword_response_determinism(self):
         """验证关键词响应规则输出稳定"""
         from agent_compare.fake_llm import (
@@ -346,3 +436,120 @@ class TestFakeLLMDeterminism:
             messages = [FakeChatMessage(role=MessageRole.USER, content="Run the test")]
             response = llm.generate(messages)
             assert response.content == "Passed"
+
+    @pytest.mark.asyncio
+    @pytest.mark.fake_llm
+    async def test_counter_rule_instance_isolation(self):
+        """验证计数器规则的实例隔离性"""
+        from agent_compare.fake_llm import (
+            CounterRule,
+            FakeChatMessage,
+            MessageRole,
+            create_fake_llm,
+        )
+
+        rule1 = CounterRule(prefix="Instance A: ")
+        llm1 = create_fake_llm(rules=[rule1])
+
+        rule2 = CounterRule(prefix="Instance B: ")
+        llm2 = create_fake_llm(rules=[rule2])
+
+        messages = [FakeChatMessage(role=MessageRole.USER, content="test")]
+
+        for i in range(3):
+            response1 = llm1.generate(messages)
+            response2 = llm2.generate(messages)
+            
+            assert f"Instance A: {i + 1}" in response1.content
+            assert f"Instance B: {i + 1}" in response2.content
+
+    @pytest.mark.asyncio
+    @pytest.mark.fake_llm
+    async def test_error_simulating_rule(self):
+        """验证错误模拟规则"""
+        from agent_compare.fake_llm import (
+            ErrorSimulatingRule,
+            FakeChatMessage,
+            MessageRole,
+            create_fake_llm,
+        )
+
+        rule = ErrorSimulatingRule(
+            trigger_keyword="fail",
+            error_type="timeout",
+            error_message="Request timed out after 30 seconds"
+        )
+        llm = create_fake_llm(rules=[rule])
+
+        fail_message = [FakeChatMessage(role=MessageRole.USER, content="Please fail this request")]
+        normal_message = [FakeChatMessage(role=MessageRole.USER, content="Normal request")]
+
+        response = llm.generate(fail_message)
+        assert "error" in response.content.lower()
+        assert "timeout" in response.content.lower()
+
+        response = llm.generate(normal_message)
+        assert "error" not in response.content.lower()
+
+
+class TestCompatibilityModule:
+    """测试兼容性模块"""
+
+    @pytest.mark.fake_llm
+    def test_check_compatibility_returns_report(self):
+        """验证兼容性检查返回有效报告"""
+        from agent_compare.compatibility import (
+            check_compatibility,
+            CompatibilityReport,
+            FrameworkStatus,
+        )
+
+        report = check_compatibility()
+
+        assert isinstance(report, CompatibilityReport)
+        assert isinstance(report.python_version, str)
+        assert isinstance(report.langchain, FrameworkStatus)
+        assert isinstance(report.agentscope, FrameworkStatus)
+
+    @pytest.mark.fake_llm
+    def test_format_compatibility_report(self):
+        """验证兼容性报告格式化"""
+        from agent_compare.compatibility import (
+            check_compatibility,
+            format_compatibility_report,
+        )
+
+        report = check_compatibility()
+        formatted = format_compatibility_report(report)
+
+        assert isinstance(formatted, str)
+        assert "兼容性检查报告" in formatted
+        assert "Python 版本" in formatted
+
+    @pytest.mark.fake_llm
+    def test_framework_availability_enum(self):
+        """验证框架可用性枚举值"""
+        from agent_compare.compatibility import (
+            FrameworkAvailability,
+        )
+
+        assert FrameworkAvailability.AVAILABLE == "available"
+        assert FrameworkAvailability.NOT_INSTALLED == "not_installed"
+        assert FrameworkAvailability.NOT_SUPPORTED == "not_supported"
+
+    @pytest.mark.fake_llm
+    def test_exit_codes_defined(self):
+        """验证退出码定义"""
+        from agent_compare.compatibility import (
+            EXIT_CODE_SUCCESS,
+            EXIT_CODE_INVALID_FRAMEWORK,
+            EXIT_CODE_NO_FRAMEWORKS,
+            EXIT_CODE_MISSING_DEPENDENCY,
+            EXIT_CODE_RUNTIME_ERROR,
+        )
+
+        assert EXIT_CODE_SUCCESS == 0
+        assert EXIT_CODE_INVALID_FRAMEWORK == 1
+        assert EXIT_CODE_NO_FRAMEWORKS == 2
+        assert EXIT_CODE_MISSING_DEPENDENCY == 3
+        assert EXIT_CODE_RUNTIME_ERROR == 4

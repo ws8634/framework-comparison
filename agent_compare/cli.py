@@ -13,16 +13,57 @@ from rich.console import Console
 from rich.table import Table
 from rich import print as rprint
 
-from agent_compare.langchain_impl import (
-    LangChainConcurrentScenario,
-    LangChainMultiInstanceScenario,
-    LangChainMultiAgentScenario,
+from agent_compare.compatibility import (
+    check_compatibility,
+    format_compatibility_report,
+    get_installation_guide,
+    EXIT_CODE_SUCCESS,
+    EXIT_CODE_INVALID_FRAMEWORK,
+    EXIT_CODE_NO_FRAMEWORKS,
+    EXIT_CODE_MISSING_DEPENDENCY,
+    EXIT_CODE_RUNTIME_ERROR,
+    FrameworkAvailability,
 )
-from agent_compare.agentscope_impl import (
-    AgentScopeConcurrentScenario,
-    AgentScopeMultiInstanceScenario,
-    AgentScopeMultiAgentScenario,
-)
+
+
+LangChainConcurrentScenario = None
+LangChainMultiInstanceScenario = None
+LangChainMultiAgentScenario = None
+AgentScopeConcurrentScenario = None
+AgentScopeMultiInstanceScenario = None
+AgentScopeMultiAgentScenario = None
+
+
+def _lazy_import_langchain():
+    global LangChainConcurrentScenario
+    global LangChainMultiInstanceScenario
+    global LangChainMultiAgentScenario
+    
+    if LangChainConcurrentScenario is None:
+        from agent_compare.langchain_impl import (
+            LangChainConcurrentScenario as _LangChainConcurrentScenario,
+            LangChainMultiInstanceScenario as _LangChainMultiInstanceScenario,
+            LangChainMultiAgentScenario as _LangChainMultiAgentScenario,
+        )
+        LangChainConcurrentScenario = _LangChainConcurrentScenario
+        LangChainMultiInstanceScenario = _LangChainMultiInstanceScenario
+        LangChainMultiAgentScenario = _LangChainMultiAgentScenario
+
+
+def _lazy_import_agentscope():
+    global AgentScopeConcurrentScenario
+    global AgentScopeMultiInstanceScenario
+    global AgentScopeMultiAgentScenario
+    
+    if AgentScopeConcurrentScenario is None:
+        from agent_compare.agentscope_impl import (
+            AgentScopeConcurrentScenario as _AgentScopeConcurrentScenario,
+            AgentScopeMultiInstanceScenario as _AgentScopeMultiInstanceScenario,
+            AgentScopeMultiAgentScenario as _AgentScopeMultiAgentScenario,
+        )
+        AgentScopeConcurrentScenario = _AgentScopeConcurrentScenario
+        AgentScopeMultiInstanceScenario = _AgentScopeMultiInstanceScenario
+        AgentScopeMultiAgentScenario = _AgentScopeMultiAgentScenario
 
 
 class Framework(str, Enum):
@@ -86,26 +127,35 @@ async def run_concurrent_scenario(
     framework: Framework,
     num_tasks: int,
     max_concurrency: Optional[int],
+    compatibility_report,
 ) -> Dict[str, Any]:
     results = {}
     
     if framework in [Framework.LANGCHAIN, Framework.BOTH]:
-        console.print(f"[cyan]运行 LangChain 并发调度场景 (tasks={num_tasks}, concurrency={max_concurrency})...[/cyan]")
-        scenario = LangChainConcurrentScenario()
-        result = await scenario.run(
-            num_tasks=num_tasks,
-            max_concurrency=max_concurrency,
-        )
-        results["langchain"] = result
+        if compatibility_report.langchain.is_available():
+            _lazy_import_langchain()
+            console.print(f"[cyan]运行 LangChain 并发调度场景 (tasks={num_tasks}, concurrency={max_concurrency})...[/cyan]")
+            scenario = LangChainConcurrentScenario()
+            result = await scenario.run(
+                num_tasks=num_tasks,
+                max_concurrency=max_concurrency,
+            )
+            results["langchain"] = result
+        else:
+            console.print(f"[yellow]跳过 LangChain 并发调度场景：框架不可用[/yellow]")
     
     if framework in [Framework.AGENTSCOPE, Framework.BOTH]:
-        console.print(f"[cyan]运行 AgentScope 并发调度场景 (tasks={num_tasks}, concurrency={max_concurrency})...[/cyan]")
-        scenario = AgentScopeConcurrentScenario()
-        result = await scenario.run(
-            num_tasks=num_tasks,
-            max_concurrency=max_concurrency,
-        )
-        results["agentscope"] = result
+        if compatibility_report.agentscope.is_available():
+            _lazy_import_agentscope()
+            console.print(f"[cyan]运行 AgentScope 并发调度场景 (tasks={num_tasks}, concurrency={max_concurrency})...[/cyan]")
+            scenario = AgentScopeConcurrentScenario()
+            result = await scenario.run(
+                num_tasks=num_tasks,
+                max_concurrency=max_concurrency,
+            )
+            results["agentscope"] = result
+        else:
+            console.print(f"[yellow]跳过 AgentScope 并发调度场景：框架不可用[/yellow]")
     
     return results
 
@@ -114,26 +164,35 @@ async def run_multi_instance_scenario(
     framework: Framework,
     num_instances: int,
     prompts_per_instance: int,
+    compatibility_report,
 ) -> Dict[str, Any]:
     results = {}
     
     if framework in [Framework.LANGCHAIN, Framework.BOTH]:
-        console.print(f"[cyan]运行 LangChain 多实例管理场景 (instances={num_instances}, prompts={prompts_per_instance})...[/cyan]")
-        scenario = LangChainMultiInstanceScenario()
-        result = await scenario.run(
-            num_instances=num_instances,
-            prompts_per_instance=prompts_per_instance,
-        )
-        results["langchain"] = result
+        if compatibility_report.langchain.is_available():
+            _lazy_import_langchain()
+            console.print(f"[cyan]运行 LangChain 多实例管理场景 (instances={num_instances}, prompts={prompts_per_instance})...[/cyan]")
+            scenario = LangChainMultiInstanceScenario()
+            result = await scenario.run(
+                num_instances=num_instances,
+                prompts_per_instance=prompts_per_instance,
+            )
+            results["langchain"] = result
+        else:
+            console.print(f"[yellow]跳过 LangChain 多实例管理场景：框架不可用[/yellow]")
     
     if framework in [Framework.AGENTSCOPE, Framework.BOTH]:
-        console.print(f"[cyan]运行 AgentScope 多实例管理场景 (instances={num_instances}, prompts={prompts_per_instance})...[/cyan]")
-        scenario = AgentScopeMultiInstanceScenario()
-        result = await scenario.run(
-            num_instances=num_instances,
-            prompts_per_instance=prompts_per_instance,
-        )
-        results["agentscope"] = result
+        if compatibility_report.agentscope.is_available():
+            _lazy_import_agentscope()
+            console.print(f"[cyan]运行 AgentScope 多实例管理场景 (instances={num_instances}, prompts={prompts_per_instance})...[/cyan]")
+            scenario = AgentScopeMultiInstanceScenario()
+            result = await scenario.run(
+                num_instances=num_instances,
+                prompts_per_instance=prompts_per_instance,
+            )
+            results["agentscope"] = result
+        else:
+            console.print(f"[yellow]跳过 AgentScope 多实例管理场景：框架不可用[/yellow]")
     
     return results
 
@@ -141,24 +200,33 @@ async def run_multi_instance_scenario(
 async def run_multi_agent_scenario(
     framework: Framework,
     fail_subtask: Optional[str],
+    compatibility_report,
 ) -> Dict[str, Any]:
     results = {}
     
     if framework in [Framework.LANGCHAIN, Framework.BOTH]:
-        console.print(f"[cyan]运行 LangChain 多智能体协作场景 (fail_subtask={fail_subtask})...[/cyan]")
-        scenario = LangChainMultiAgentScenario()
-        result = await scenario.run(
-            fail_subtask=fail_subtask,
-        )
-        results["langchain"] = result
+        if compatibility_report.langchain.is_available():
+            _lazy_import_langchain()
+            console.print(f"[cyan]运行 LangChain 多智能体协作场景 (fail_subtask={fail_subtask})...[/cyan]")
+            scenario = LangChainMultiAgentScenario()
+            result = await scenario.run(
+                fail_subtask=fail_subtask,
+            )
+            results["langchain"] = result
+        else:
+            console.print(f"[yellow]跳过 LangChain 多智能体协作场景：框架不可用[/yellow]")
     
     if framework in [Framework.AGENTSCOPE, Framework.BOTH]:
-        console.print(f"[cyan]运行 AgentScope 多智能体协作场景 (fail_subtask={fail_subtask})...[/cyan]")
-        scenario = AgentScopeMultiAgentScenario()
-        result = await scenario.run(
-            fail_subtask=fail_subtask,
-        )
-        results["agentscope"] = result
+        if compatibility_report.agentscope.is_available():
+            _lazy_import_agentscope()
+            console.print(f"[cyan]运行 AgentScope 多智能体协作场景 (fail_subtask={fail_subtask})...[/cyan]")
+            scenario = AgentScopeMultiAgentScenario()
+            result = await scenario.run(
+                fail_subtask=fail_subtask,
+            )
+            results["agentscope"] = result
+        else:
+            console.print(f"[yellow]跳过 AgentScope 多智能体协作场景：框架不可用[/yellow]")
     
     return results
 
@@ -190,9 +258,21 @@ def generate_aggregate_summary(
     all_results: Dict[str, Dict[str, Any]],
     output_paths: Dict[str, Dict[str, str]],
     timestamp: str,
+    compatibility_report,
 ) -> Dict[str, Any]:
     aggregate = {
         "timestamp": timestamp,
+        "python_version": compatibility_report.python_version,
+        "framework_availability": {
+            "langchain": {
+                "available": compatibility_report.langchain.is_available(),
+                "version": compatibility_report.langchain.version,
+            },
+            "agentscope": {
+                "available": compatibility_report.agentscope.is_available(),
+                "version": compatibility_report.agentscope.version,
+            },
+        },
         "summary": {},
         "results": {},
         "output_paths": output_paths,
@@ -232,6 +312,20 @@ def generate_aggregate_summary(
         }
     
     return aggregate
+
+
+@app.command()
+def check() -> None:
+    """检查环境兼容性和框架可用性"""
+    report = check_compatibility()
+    console.print(format_compatibility_report(report))
+    
+    if not report.has_at_least_one_framework():
+        console.print()
+        console.print("[red]错误: 没有可用的框架！[/red]")
+        console.print()
+        console.print(get_installation_guide(report))
+        raise typer.Exit(code=EXIT_CODE_NO_FRAMEWORKS)
 
 
 @app.command()
@@ -285,21 +379,64 @@ def run(
         "-o",
         help="输出目录 (默认为 ./artifacts)",
     ),
+    skip_compatibility_check: bool = typer.Option(
+        False,
+        "--skip-compatibility-check",
+        help="跳过兼容性检查（不推荐）",
+    ),
 ) -> None:
     """运行框架对比实验
     
     支持并发调度、多实例管理、多智能体协作三个场景。
     """
     
+    compatibility_report = check_compatibility()
+    
+    if not skip_compatibility_check:
+        available_frameworks = compatibility_report.get_available_frameworks()
+        
+        if not available_frameworks:
+            console.print("[red]错误: 没有可用的框架！[/red]")
+            console.print()
+            console.print(get_installation_guide(compatibility_report))
+            raise typer.Exit(code=EXIT_CODE_NO_FRAMEWORKS)
+        
+        if framework == Framework.LANGCHAIN and not compatibility_report.langchain.is_available():
+            console.print(f"[red]错误: 请求运行 LangChain，但该框架不可用[/red]")
+            if compatibility_report.langchain.availability == FrameworkAvailability.NOT_SUPPORTED:
+                console.print(f"[red]原因: {compatibility_report.langchain.error_message}[/red]")
+            raise typer.Exit(code=EXIT_CODE_INVALID_FRAMEWORK)
+        
+        if framework == Framework.AGENTSCOPE and not compatibility_report.agentscope.is_available():
+            console.print(f"[red]错误: 请求运行 AgentScope，但该框架不可用[/red]")
+            if compatibility_report.agentscope.availability == FrameworkAvailability.NOT_SUPPORTED:
+                console.print(f"[red]原因: {compatibility_report.agentscope.error_message}[/red]")
+            elif compatibility_report.agentscope.availability == FrameworkAvailability.NOT_INSTALLED:
+                console.print(f"[yellow]提示: 请使用 Python 3.9-3.12 安装 AgentScope[/yellow]")
+            raise typer.Exit(code=EXIT_CODE_INVALID_FRAMEWORK)
+        
+        if framework == Framework.BOTH:
+            if not compatibility_report.has_at_least_one_framework():
+                console.print("[red]错误: 没有可用的框架！[/red]")
+                raise typer.Exit(code=EXIT_CODE_NO_FRAMEWORKS)
+            
+            if len(available_frameworks) == 1:
+                console.print(f"[yellow]警告: 仅 {available_frameworks[0]} 可用，将只运行该框架[/yellow]")
+    
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     
     if output_dir:
         artifacts_dir = Path(output_dir)
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            console.print(f"[red]错误: 无法创建输出目录 '{output_dir}': {e}[/red]")
+            raise typer.Exit(code=EXIT_CODE_RUNTIME_ERROR)
     else:
         artifacts_dir = get_artifacts_dir()
     
     console.print("[bold green]开始运行 Agent 框架对比实验[/bold green]")
+    console.print(f"[dim]Python 版本: {compatibility_report.python_version}[/dim]")
     console.print(f"[dim]输出目录: {artifacts_dir}[/dim]")
     console.print()
     
@@ -315,28 +452,30 @@ def run(
                 framework=framework,
                 num_tasks=num_tasks,
                 max_concurrency=max_concurrency,
+                compatibility_report=compatibility_report,
             )
-            all_results["concurrent"] = results
-            output_paths["concurrent"] = {}
-            
-            for fw_name, result in results.items():
-                filepath = save_result(result, fw_name, "concurrent", timestamp)
-                output_paths["concurrent"][fw_name] = str(filepath)
+            if results:
+                all_results["concurrent"] = results
+                output_paths["concurrent"] = {}
                 
-                result_dict = result.to_dict()
-                summary = SummaryStats(
-                    framework=fw_name,
-                    scenario="concurrent",
-                    total_duration_ms=result_dict.get("total_duration_ms", 0),
-                    tasks_completed=result_dict.get("tasks_completed", 0),
-                    tasks_failed=result_dict.get("tasks_failed", 0),
-                    success_rate=(
-                        result_dict.get("tasks_completed", 0) /
-                        max(1, result_dict.get("total_tasks", 1)) * 100
-                    ),
-                    output_path=str(filepath),
-                )
-                summaries.append(summary)
+                for fw_name, result in results.items():
+                    filepath = save_result(result, fw_name, "concurrent", timestamp)
+                    output_paths["concurrent"][fw_name] = str(filepath)
+                    
+                    result_dict = result.to_dict()
+                    summary = SummaryStats(
+                        framework=fw_name,
+                        scenario="concurrent",
+                        total_duration_ms=result_dict.get("total_duration_ms", 0),
+                        tasks_completed=result_dict.get("tasks_completed", 0),
+                        tasks_failed=result_dict.get("tasks_failed", 0),
+                        success_rate=(
+                            result_dict.get("tasks_completed", 0) /
+                            max(1, result_dict.get("total_tasks", 1)) * 100
+                        ),
+                        output_path=str(filepath),
+                    )
+                    summaries.append(summary)
             
             console.print()
         
@@ -345,26 +484,28 @@ def run(
                 framework=framework,
                 num_instances=num_instances,
                 prompts_per_instance=prompts_per_instance,
+                compatibility_report=compatibility_report,
             )
-            all_results["multi_instance"] = results
-            output_paths["multi_instance"] = {}
-            
-            for fw_name, result in results.items():
-                filepath = save_result(result, fw_name, "multi_instance", timestamp)
-                output_paths["multi_instance"][fw_name] = str(filepath)
+            if results:
+                all_results["multi_instance"] = results
+                output_paths["multi_instance"] = {}
                 
-                result_dict = result.to_dict()
-                summary = SummaryStats(
-                    framework=fw_name,
-                    scenario="multi_instance",
-                    total_duration_ms=result_dict.get("total_duration_ms", 0),
-                    tasks_completed=result_dict.get("total_instances", 0),
-                    tasks_failed=0,
-                    instances_managed=result_dict.get("total_instances", 0),
-                    success_rate=100.0,
-                    output_path=str(filepath),
-                )
-                summaries.append(summary)
+                for fw_name, result in results.items():
+                    filepath = save_result(result, fw_name, "multi_instance", timestamp)
+                    output_paths["multi_instance"][fw_name] = str(filepath)
+                    
+                    result_dict = result.to_dict()
+                    summary = SummaryStats(
+                        framework=fw_name,
+                        scenario="multi_instance",
+                        total_duration_ms=result_dict.get("total_duration_ms", 0),
+                        tasks_completed=result_dict.get("total_instances", 0),
+                        tasks_failed=0,
+                        instances_managed=result_dict.get("total_instances", 0),
+                        success_rate=100.0,
+                        output_path=str(filepath),
+                    )
+                    summaries.append(summary)
             
             console.print()
         
@@ -372,42 +513,62 @@ def run(
             results = await run_multi_agent_scenario(
                 framework=framework,
                 fail_subtask=fail_subtask,
+                compatibility_report=compatibility_report,
             )
-            all_results["multi_agent"] = results
-            output_paths["multi_agent"] = {}
-            
-            for fw_name, result in results.items():
-                filepath = save_result(result, fw_name, "multi_agent", timestamp)
-                output_paths["multi_agent"][fw_name] = str(filepath)
+            if results:
+                all_results["multi_agent"] = results
+                output_paths["multi_agent"] = {}
                 
-                result_dict = result.to_dict()
-                success = result_dict.get("success", False)
-                errors = result_dict.get("errors_captured", [])
-                summary = SummaryStats(
-                    framework=fw_name,
-                    scenario="multi_agent",
-                    total_duration_ms=result_dict.get("total_duration_ms", 0),
-                    tasks_completed=1 if success else 0,
-                    tasks_failed=0 if success else 1,
-                    messages_exchanged=len(result_dict.get("message_logs", [])),
-                    success_rate=100.0 if success else 0.0,
-                    output_path=str(filepath),
-                )
-                summaries.append(summary)
+                for fw_name, result in results.items():
+                    filepath = save_result(result, fw_name, "multi_agent", timestamp)
+                    output_paths["multi_agent"][fw_name] = str(filepath)
+                    
+                    result_dict = result.to_dict()
+                    success = result_dict.get("success", False)
+                    errors = result_dict.get("errors_captured", [])
+                    summary = SummaryStats(
+                        framework=fw_name,
+                        scenario="multi_agent",
+                        total_duration_ms=result_dict.get("total_duration_ms", 0),
+                        tasks_completed=1 if success else 0,
+                        tasks_failed=0 if success else 1,
+                        messages_exchanged=len(result_dict.get("message_logs", [])),
+                        success_rate=100.0 if success else 0.0,
+                        output_path=str(filepath),
+                    )
+                    summaries.append(summary)
             
             console.print()
     
-    asyncio.run(run_all())
+    try:
+        asyncio.run(run_all())
+    except Exception as e:
+        console.print(f"[red]运行时错误: {e}[/red]")
+        raise typer.Exit(code=EXIT_CODE_RUNTIME_ERROR)
     
-    aggregate = generate_aggregate_summary(all_results, output_paths, timestamp)
+    if not all_results:
+        console.print("[yellow]警告: 没有运行任何场景（可能所有框架都不可用）[/yellow]")
+        raise typer.Exit(code=EXIT_CODE_SUCCESS)
+    
+    aggregate = generate_aggregate_summary(
+        all_results, 
+        output_paths, 
+        timestamp,
+        compatibility_report
+    )
     aggregate_path = artifacts_dir / f"aggregate_{timestamp}.json"
-    with open(aggregate_path, "w", encoding="utf-8") as f:
-        json.dump(aggregate, f, indent=2, ensure_ascii=False, default=str)
+    try:
+        with open(aggregate_path, "w", encoding="utf-8") as f:
+            json.dump(aggregate, f, indent=2, ensure_ascii=False, default=str)
+    except Exception as e:
+        console.print(f"[red]错误: 无法写入汇总文件 '{aggregate_path}': {e}[/red]")
+        raise typer.Exit(code=EXIT_CODE_RUNTIME_ERROR)
     
     console.print("[bold green]实验完成！[/bold green]")
     console.print()
     
-    print_summary_table(summaries)
+    if summaries:
+        print_summary_table(summaries)
     
     console.print()
     console.print(f"[bold]汇总输出:[/bold] {aggregate_path}")
@@ -417,8 +578,15 @@ def run(
 @app.command()
 def version() -> None:
     """显示版本信息"""
-    from agent_compare import __version__
-    console.print(f"[cyan]agent-compare v{__version__}[/cyan]")
+    try:
+        from agent_compare import __version__
+        version_str = __version__
+    except ImportError:
+        version_str = "0.1.0 (未安装)"
+    
+    report = check_compatibility()
+    console.print(f"[cyan]agent-compare v{version_str}[/cyan]")
+    console.print(f"[dim]Python {report.python_version}[/dim]")
 
 
 if __name__ == "__main__":
